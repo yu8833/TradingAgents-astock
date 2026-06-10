@@ -5,6 +5,8 @@ from rich.panel import Panel
 
 from cli.config import CLI_CONFIG
 
+_SESSION = requests.Session()
+
 
 def fetch_announcements(url: str = None, timeout: float = None) -> dict:
     """Fetch announcements from endpoint. Returns dict with announcements and settings."""
@@ -13,7 +15,7 @@ def fetch_announcements(url: str = None, timeout: float = None) -> dict:
     fallback = CLI_CONFIG["announcements_fallback"]
 
     try:
-        response = requests.get(endpoint, timeout=timeout)
+        response = _SESSION.get(endpoint, timeout=timeout)
         response.raise_for_status()
         data = response.json()
         return {

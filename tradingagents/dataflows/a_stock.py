@@ -34,6 +34,14 @@ from .utils import safe_ticker_component
 
 logger = logging.getLogger(__name__)
 
+_EM_SESSION = _requests.Session()
+_EM_SESSION.headers.update({"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"})
+_EM_MIN_INTERVAL = float(os.environ.get("EM_MIN_INTERVAL", "1.0"))
+_em_last_call = [0.0]
+
+_GENERIC_SESSION = _requests.Session()
+_GENERIC_SESSION.headers.update({"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"})
+
 
 # ---------------------------------------------------------------------------
 # Helpers: ticker format & market detection
@@ -75,11 +83,38 @@ _name_to_code: dict[str, str] | None = None
 _code_to_name: dict[str, str] | None = None
 
 
+def _get_name_code_cache_path() -> str:
+    """Path to local cache for stock name-code mapping."""
+    cache_dir = os.path.join(os.path.expanduser("~"), ".tradingagents", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    return os.path.join(cache_dir, "astock_name_code_map.json")
+
+
 def _build_name_code_map() -> tuple[dict[str, str], dict[str, str]]:
-    """Build name→code and code→name maps via mootdx (both SH & SZ markets)."""
+    """Build name→code and code→name maps via mootdx (both SH & SZ markets).
+
+    Results are cached to disk as JSON to avoid rebuilding on every startup (~3-5s saved).
+    Cache is invalidated if mootdx is unavailable or the map is empty.
+    """
     global _name_to_code, _code_to_name
     if _name_to_code is not None:
         return _name_to_code, _code_to_name
+
+    cache_path = _get_name_code_cache_path()
+
+    if os.path.exists(cache_path):
+        try:
+            with open(cache_path, "r", encoding="utf-8") as f:
+                cached = _json.load(f)
+            n2c = cached.get("name_to_code", {})
+            c2n = cached.get("code_to_name", {})
+            if n2c and c2n:
+                _name_to_code = n2c
+                _code_to_name = c2n
+                logger.info("Loaded stock name-code map from cache: %d entries", len(n2c))
+                return _name_to_code, _code_to_name
+        except (IOError, _json.JSONDecodeError) as e:
+            logger.warning("Failed to load name-code cache: %s, rebuilding", e)
 
     from mootdx.quotes import Quotes
 
@@ -87,7 +122,7 @@ def _build_name_code_map() -> tuple[dict[str, str], dict[str, str]]:
     n2c: dict[str, str] = {}
     c2n: dict[str, str] = {}
 
-    for market in (0, 1):  # 0=SZ, 1=SH
+    for market in (0, 1):
         stocks = client.stocks(market=market)
         if stocks is None or stocks.empty:
             continue
@@ -102,6 +137,14 @@ def _build_name_code_map() -> tuple[dict[str, str], dict[str, str]]:
 
     _name_to_code = n2c
     _code_to_name = c2n
+
+    try:
+        with open(cache_path, "w", encoding="utf-8") as f:
+            _json.dump({"name_to_code": n2c, "code_to_name": c2n}, f, ensure_ascii=False)
+        logger.info("Saved stock name-code map to cache: %d entries", len(n2c))
+    except IOError as e:
+        logger.warning("Failed to save name-code cache: %s", e)
+
     logger.info("Built stock name-code map: %d entries", len(n2c))
     return _name_to_code, _code_to_name
 
@@ -210,18 +253,12 @@ _UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 
 # ---------------------------------------------------------------------------
 # 东财防封：全局节流 + 会话复用 (Eastmoney anti-ban: throttle + Keep-Alive)
-# ---------------------------------------------------------------------------
 # 东财系 HTTP 接口（push2 / push2his / datacenter-web / search-api / np-weblist）
 # 有风控：每秒 >5 次 / 单 IP 并发 ≥10 / 1 分钟 ≥200 次 / 5 分钟 ≥300 次 → 临时封 IP。
 # 多 Agent 投研跑批量分析时会高频请求东财，是被封的头号元凶。所有 eastmoney.com
 # 请求一律走 _em_get()：串行限流（最小间隔 + 随机抖动）+ 复用 Keep-Alive 会话 + 默认 UA。
 # 注意：仅东财接口走此入口；mootdx(TCP) / 腾讯 / 新浪 / 同花顺 / 财联社 / 百度 等
 # 不限流（实测不封 IP 或风控极弱）。批量任务可调大 EM_MIN_INTERVAL 进一步降速。
-_EM_SESSION = _requests.Session()
-_EM_SESSION.headers.update({"User-Agent": _UA})
-# 两次东财请求最小间隔(秒)；批量多 Agent 场景可设环境变量 EM_MIN_INTERVAL=1.5~2 降速。
-_EM_MIN_INTERVAL = float(os.environ.get("EM_MIN_INTERVAL", "1.0"))
-_em_last_call = [0.0]  # 模块级上次东财请求时间戳
 
 
 def _em_get(url, params=None, headers=None, timeout=15, **kwargs):
@@ -284,7 +321,7 @@ def _ths_eps_forecast(code: str) -> pd.DataFrame:
         "User-Agent": _UA,
         "Referer": "https://basic.10jqka.com.cn/",
     }
-    r = _requests.get(url, headers=headers, timeout=15)
+    r = _GENERIC_SESSION.get(url, headers=headers, timeout=15)
     r.encoding = "gbk"
     dfs = pd.read_html(r.text)
     # Find the table containing EPS data
@@ -317,7 +354,7 @@ def _sina_kline_fallback(code: str, start_date: str = None, end_date: str = None
         "ma": "no",
         "datalen": "800",
     }
-    r = _requests.get(url, params=params, timeout=15)
+    r = _GENERIC_SESSION.get(url, params=params, timeout=15)
     r.raise_for_status()
     data = _json.loads(r.text)
 
@@ -787,7 +824,7 @@ def _get_financial_report_sina(
         "page": "1",
         "num": "20",
     }
-    r = _requests.get(url, params=params, headers={"User-Agent": _UA}, timeout=15)
+    r = _GENERIC_SESSION.get(url, params=params, headers={"User-Agent": _UA}, timeout=15)
     d = r.json()
 
     result = d.get("result", {}).get("data", {})
@@ -971,7 +1008,7 @@ def _fetch_news_sina(code: str, page_size: int = 20) -> list[dict]:
         "Referer": "https://finance.sina.com.cn/",
     }
 
-    resp = _requests.get(url, headers=headers, timeout=15)
+    resp = _GENERIC_SESSION.get(url, headers=headers, timeout=15)
     resp.raise_for_status()
     resp.encoding = "gb2312"
     html = resp.text
@@ -1081,7 +1118,7 @@ def get_global_news(
         cls_url = "https://www.cls.cn/nodeapi/telegraphList"
         cls_params = {"rn": str(limit), "page": "1"}
         cls_headers = {"User-Agent": _UA, "Referer": "https://www.cls.cn/"}
-        r_cls = _requests.get(cls_url, params=cls_params, headers=cls_headers, timeout=10)
+        r_cls = _GENERIC_SESSION.get(cls_url, params=cls_params, headers=cls_headers, timeout=10)
         d_cls = r_cls.json()
         for item in d_cls.get("data", {}).get("roll_data", []):
             title = item.get("title", "") or item.get("brief", "")
@@ -1328,7 +1365,7 @@ def get_hot_stocks(
                 "Chrome/117.0.0.0 Safari/537.36"
             )
         }
-        r = requests.get(url, headers=headers, timeout=10)
+        r = _GENERIC_SESSION.get(url, headers=headers, timeout=10)
         data = r.json()
 
         if data.get("errocode", 0) != 0:
@@ -1475,7 +1512,7 @@ def get_northbound_flow(
 
     try:
         url_rt = "https://data.hexin.cn/market/hsgtApi/method/dayChart/"
-        r = requests.get(url_rt, headers=hsgt_headers, timeout=10)
+        r = _GENERIC_SESSION.get(url_rt, headers=hsgt_headers, timeout=10)
         d = r.json()
 
         times = d.get("time", [])
@@ -1579,7 +1616,7 @@ def get_concept_blocks(
             f'?stock=[{{"code":"{code}","market":"ab","type":"stock"}}]'
             "&finClientType=pc"
         )
-        r = requests.get(url, headers=_BAIDU_PAE_HEADERS, timeout=10)
+        r = _GENERIC_SESSION.get(url, headers=_BAIDU_PAE_HEADERS, timeout=10)
         d = r.json()
 
         if str(d.get("ResultCode", -1)) != "0":

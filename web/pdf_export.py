@@ -11,6 +11,8 @@ from typing import Any
 import fpdf as _fpdf_mod
 from fpdf import FPDF
 
+from tradingagents.utils.time_utils import now_beijing_str
+
 
 # fpdf2 (maintained fork) and the abandoned pyfpdf 1.x BOTH import as `fpdf`, and
 # installing both leaves whichever was installed last on disk. pyfpdf 1.x encodes
@@ -207,7 +209,7 @@ class _ReportPDF(FPDF):
         self.set_text_color(100, 100, 100)
         self.cell(0, 10, f"分析日期: {self.trade_date}", align="C")
         self.ln(8)
-        self.cell(0, 10, f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}", align="C")
+        self.cell(0, 10, f"生成时间: {now_beijing_str('%Y-%m-%d %H:%M')}", align="C")
         self.ln(20)
 
         r, g, b = _signal_color(self.signal)
@@ -418,7 +420,7 @@ def generate_markdown(final_state: dict[str, Any], ticker: str, trade_date: str,
         "",
         f"- **股票代码**：{ticker}",
         f"- **分析日期**：{trade_date}",
-        f"- **生成时间**：{datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"- **生成时间**：{now_beijing_str('%Y-%m-%d %H:%M')}",
         f"- **交易信号**：**{signal.upper()}**",
         "",
         "> ⚠️ 本报告由 AI 多 Agent 系统自动生成，仅供学习研究与技术演示，"

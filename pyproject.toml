@@ -39,6 +39,15 @@ dependencies = [
     "mootdx>=0.10.0",
 ]
 
+# --- Dependency Version Notes ---
+# For reproducible builds, run: pip install pip-tools && pip-compile
+#
+# Key dependencies with breaking-change risk:
+#   • mootdx >=0.10.0  — A股实时数据核心，版本不锁定可能导致TCP API不兼容
+#   • yfinance >=0.2.63 — 美股数据源，部分版本有breaking change
+#   • langgraph >=0.4.8 — 状态机图框架
+#   • stockstats >=0.6.5 — 技术指标计算
+
 [project.urls]
 Homepage = "https://github.com/simonlin1212/tradingagents-astock"
 Repository = "https://github.com/simonlin1212/tradingagents-astock"

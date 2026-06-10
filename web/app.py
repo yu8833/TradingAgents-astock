@@ -1,4 +1,4 @@
-"""TradingAgents A股分析 — Streamlit Web UI."""
+"""A股智能投研分析 — Streamlit Web UI."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ load_dotenv(_PROJECT_ROOT / ".env")
 
 from tradingagents.default_config import DEFAULT_CONFIG  # noqa: E402
 
+from web.auth import check_auth, is_auth_enabled, logout_user, render_login_page  # noqa: E402
 from web.components.progress_panel import render_progress  # noqa: E402
 from web.components.report_viewer import render_report  # noqa: E402
 from web.components.sidebar import render_sidebar  # noqa: E402
@@ -25,11 +26,15 @@ from web.history import extract_signal, load_analysis  # noqa: E402
 from web.progress import ProgressTracker  # noqa: E402
 from web.runner import run_analysis_in_thread  # noqa: E402
 
+if is_auth_enabled() and not check_auth():
+    render_login_page()
+    st.stop()
+
 # ── Page config ──────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="TradingAgents-Astock A股分析",
-    page_icon="📈",
+    page_title="A股智能投研分析",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -246,23 +251,68 @@ else:
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 60vh;
+            min-height: 65vh;
             text-align: center;
         ">
-            <div style="font-size: 4rem; margin-bottom: 1rem;">📈</div>
+            <div style="font-size: 5rem; margin-bottom: 1.5rem;">📊</div>
             <div style="
-                font-size: 2.5rem;
+                font-size: 2.8rem;
                 font-weight: 900;
-                margin-bottom: 0.5rem;
+                margin-bottom: 1rem;
+                letter-spacing: -0.02em;
             ">
-                <span style="color: #ff5a1f;">Trading</span><span style="color: #f5f1eb;">Agents</span><span style="color: #f5f1eb;">-</span><span style="color: #ff5a1f;">Astock</span>
+                <span style="color: #ff5a1f;">A股</span><span style="color: #f5f1eb;">智能</span><span style="color: #ff5a1f;">投研</span><span style="color: #f5f1eb;">分析</span>
             </div>
-            <div style="color: #888; font-size: 1.1rem; max-width: 500px; line-height: 1.6;">
-                A股多Agent投研分析系统<br>
-                7位AI分析师 → 质量门控 → 多空辩论 → 风控评估 → 最终决策
+            <div style="color: #888; font-size: 1.1rem; max-width: 550px; line-height: 1.8; margin-bottom: 2rem;">
+                7位AI分析师协同工作 · 深度研究 · 多空辩论 · 风险评估
             </div>
             <div style="
-                margin-top: 2rem;
+                display: flex;
+                gap: 1rem;
+                margin-bottom: 2rem;
+            ">
+                <div style="
+                    background: linear-gradient(135deg, #1a1a1a, #0f0f0f);
+                    border: 1px solid #2a2a2a;
+                    border-radius: 12px;
+                    padding: 1rem 1.5rem;
+                    text-align: center;
+                ">
+                    <div style="color: #ff5a1f; font-size: 1.5rem; margin-bottom: 0.3rem;">📰</div>
+                    <div style="color: #888; font-size: 0.85rem;">新闻分析</div>
+                </div>
+                <div style="
+                    background: linear-gradient(135deg, #1a1a1a, #0f0f0f);
+                    border: 1px solid #2a2a2a;
+                    border-radius: 12px;
+                    padding: 1rem 1.5rem;
+                    text-align: center;
+                ">
+                    <div style="color: #ff5a1f; font-size: 1.5rem; margin-bottom: 0.3rem;">📈</div>
+                    <div style="color: #888; font-size: 0.85rem;">技术分析</div>
+                </div>
+                <div style="
+                    background: linear-gradient(135deg, #1a1a1a, #0f0f0f);
+                    border: 1px solid #2a2a2a;
+                    border-radius: 12px;
+                    padding: 1rem 1.5rem;
+                    text-align: center;
+                ">
+                    <div style="color: #ff5a1f; font-size: 1.5rem; margin-bottom: 0.3rem;">💼</div>
+                    <div style="color: #888; font-size: 0.85rem;">基本面</div>
+                </div>
+                <div style="
+                    background: linear-gradient(135deg, #1a1a1a, #0f0f0f);
+                    border: 1px solid #2a2a2a;
+                    border-radius: 12px;
+                    padding: 1rem 1.5rem;
+                    text-align: center;
+                ">
+                    <div style="color: #ff5a1f; font-size: 1.5rem; margin-bottom: 0.3rem;">⚖️</div>
+                    <div style="color: #888; font-size: 0.85rem;">风险评估</div>
+                </div>
+            </div>
+            <div style="
                 padding: 1rem 2rem;
                 border: 1px solid #222;
                 border-radius: 12px;
@@ -274,14 +324,14 @@ else:
             <div style="
                 margin-top: 2.5rem;
                 padding: 0.8rem 1.5rem;
-                color: #555;
+                color: #444;
                 font-size: 0.75rem;
                 max-width: 500px;
                 line-height: 1.6;
                 border-top: 1px solid #1a1a1a;
             ">
-                ⚠️ 本项目仅供学习研究与技术演示，不构成任何投资建议。<br>
-                投资决策请咨询持牌专业机构。作者不对使用本工具产生的任何损失承担责任。
+                ⚠️ 本工具仅供学习研究，不构成任何投资建议<br>
+                投资有风险，决策需谨慎
             </div>
         </div>
         """,

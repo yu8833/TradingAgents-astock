@@ -7,6 +7,7 @@ from datetime import date
 import streamlit as st
 
 from tradingagents.llm_clients.model_catalog import MODEL_OPTIONS
+from web.auth import is_auth_enabled, logout_user
 from web.history import get_history
 
 # Provider display names in recommended order
@@ -108,12 +109,12 @@ def render_sidebar() -> None:
     st.markdown(
         """
         <div style="text-align:center; margin-bottom:1.5rem;">
-            <span style="font-size:2rem; font-weight:800; color:#ff5a1f;">Trading</span><span style="font-size:2rem; font-weight:800; color:#f5f1eb;">Agents</span><span style="font-size:2rem; font-weight:800; color:#f5f1eb;">-</span><span style="font-size:2rem; font-weight:800; color:#ff5a1f;">Astock</span>
-            <div style="font-size:0.85rem; color:#888; margin-top:0.2rem;">
-                A股多Agent投研系统
+            <div style="font-size:1.8rem; font-weight:800; margin-bottom:0.3rem;">
+                <span style="color:#ff5a1f;">📈 A股投研</span><span style="color:#f5f1eb;">分析系统</span>
             </div>
-            <div style="font-size:0.7rem; color:#555; margin-top:0.3rem;">
-                by <a href="https://github.com/simonlin1212" style="color:#ff5a1f; text-decoration:none;">simonlin1212</a>
+            <div style="font-size:0.8rem; color:#666; margin-top:0.5rem; line-height:1.5;">
+                多Agent智能分析 · 7位专业分析师<br>
+                深度研究 · 风险评估 · 决策支持
             </div>
         </div>
         """,
@@ -166,7 +167,6 @@ def render_sidebar() -> None:
     history = get_history()
     if not history:
         st.caption("暂无历史记录")
-        return
 
     for entry in history[:20]:
         t, d = entry["ticker"], entry["date"]
@@ -174,6 +174,12 @@ def render_sidebar() -> None:
         if st.button(label, key=f"hist_{t}_{d}", use_container_width=True):
             st.session_state["viewing_history"] = entry["path"]
             st.session_state["start_analysis"] = None
+
+    if is_auth_enabled():
+        st.markdown("---")
+        if st.button("🔒 退出登录", use_container_width=True):
+            logout_user()
+            st.rerun()
 
     st.markdown("---")
     st.caption("⚠️ 仅供学习研究，不构成投资建议")

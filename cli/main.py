@@ -1227,6 +1227,46 @@ def run_analysis(checkpoint: bool = False):
 
 
 @app.command()
+def set_password(
+    password: str = typer.Option(..., prompt=True, hide_input=True, help="设置的管理员密码（至少4位）"),
+    confirm: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True, help="确认密码"),
+):
+    """设置Web UI登录密码。"""
+    from web.auth import is_auth_enabled, set_password, has_stored_password
+
+    if password != confirm:
+        console.print("[red]两次输入的密码不一致[/red]")
+        raise typer.Exit(1)
+
+    if has_stored_password():
+        console.print("[yellow]密码已存在，如需修改请使用 change-password 命令[/yellow]")
+        raise typer.Exit(1)
+
+    err = set_password(password)
+    if err:
+        console.print(f"[red]{err}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[green]✅ 密码设置成功！请在 .env 中添加 ADMIN_AUTH_ENABLED=true 以启用登录验证[/green]")
+
+
+@app.command()
+def change_password(
+    current: str = typer.Option(..., prompt=True, hide_input=True, help="当前密码"),
+    new_password: str = typer.Option(..., prompt=True, hide_input=True, confirmation_prompt=True, help="新密码（至少4位）"),
+):
+    """修改Web UI登录密码。"""
+    from web.auth import change_password
+
+    err = change_password(current, new_password)
+    if err:
+        console.print(f"[red]{err}[/red]")
+        raise typer.Exit(1)
+
+    console.print("[green]✅ 密码修改成功！[/green]")
+
+
+@app.command()
 def analyze(
     checkpoint: bool = typer.Option(
         False,

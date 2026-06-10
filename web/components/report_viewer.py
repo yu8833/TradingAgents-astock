@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
 import streamlit as st
 
 from web.pdf_export import generate_markdown, generate_pdf
+
+
+def _get_stock_name(ticker: str) -> str:
+    """Get stock name from ticker code."""
+    try:
+        from tradingagents.dataflows.a_stock import _build_name_code_map
+        _, code_to_name = _build_name_code_map()
+        return code_to_name.get(ticker, "")
+    except Exception:
+        return ""
 
 
 def _strip_think(text: str) -> str:
@@ -75,15 +86,17 @@ def render_report(
 
     st.caption("⚠️ 本报告由 AI 自动生成，仅供学习研究，不构成投资建议。")
 
-    # Markdown export always works (no font dependency); PDF is generated
-    # lazily and guarded so a PDF/font failure never crashes the results page.
+    stock_name = _get_stock_name(ticker)
+    name_suffix = f"_{stock_name}" if stock_name else ""
+    file_prefix = f"{ticker}{name_suffix}_{trade_date}"
+
     col_md, col_pdf, col_spacer = st.columns([1, 1, 2])
     with col_md:
         md_text = generate_markdown(final_state, ticker, trade_date, signal)
         st.download_button(
             "📥 下载 Markdown",
             data=md_text.encode("utf-8"),
-            file_name=f"TradingAgents-Astock_{ticker}_{trade_date}.md",
+            file_name=f"{file_prefix}.md",
             mime="text/markdown",
             use_container_width=True,
         )
@@ -93,16 +106,52 @@ def render_report(
             st.download_button(
                 "📄 下载 PDF",
                 data=pdf_bytes,
-                file_name=f"TradingAgents-Astock_{ticker}_{trade_date}.pdf",
+                file_name=f"{file_prefix}.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
         except Exception as exc:  # noqa: BLE001 — never let PDF crash the page
+            pdf_bytes = None
             st.button(
                 "📄 PDF 不可用",
                 disabled=True,
                 use_container_width=True,
                 help=f"PDF 生成失败，请改用 Markdown 导出。原因：{exc}",
+            )
+
+    col_send, col_spacer2 = st.columns([1, 3])
+    with col_send:
+        email_sender = os.environ.get("EMAIL_SENDER", "")
+        email_password = os.environ.get("EMAIL_PASSWORD", "")
+        email_receiver = os.environ.get("EMAIL_RECEIVER", "") or os.environ.get("EMAIL_RECEIVERS", "")
+
+        if email_sender and email_password and email_receiver:
+            if st.button("📧 发送到邮箱", use_container_width=True):
+                from web.email_sender import send_analysis_report
+
+                receivers = [r.strip() for r in email_receiver.split(",") if r.strip()]
+                with st.spinner("发送中..."):
+                    success, msg = send_analysis_report(
+                        ticker=ticker,
+                        trade_date=trade_date,
+                        stock_name=stock_name,
+                        signal=signal,
+                        md_content=md_text,
+                        pdf_bytes=pdf_bytes or b"",
+                        sender=email_sender,
+                        password=email_password,
+                        receivers=receivers,
+                    )
+                if success:
+                    st.success(f"✅ {msg}")
+                else:
+                    st.error(f"❌ {msg}")
+        else:
+            st.button(
+                "📧 发送到邮箱",
+                disabled=True,
+                use_container_width=True,
+                help="请在 .env 中配置 EMAIL_SENDER, EMAIL_PASSWORD, EMAIL_RECEIVER",
             )
 
     st.markdown("---")
